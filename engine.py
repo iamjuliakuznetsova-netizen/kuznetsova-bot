@@ -9,7 +9,7 @@ from aiogram.exceptions import TelegramBadRequest
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
 import db
-from config import KLOD_KLUB_URL, MAIN_CHANNEL
+from config import KLOD_KLUB_URL, MAIN_CHANNEL, TEST_TELEGRAM_IDS
 from scenarios import REGISTRY
 
 logger = logging.getLogger(__name__)
@@ -121,16 +121,17 @@ async def _check_membership(bot: Bot, user_id: int) -> bool:
 
 async def _deliver(bot: Bot, chat_id: int, user_id: int, scenario: dict) -> None:
     scenario_key = scenario["key"]
+    is_test_user = user_id in TEST_TELEGRAM_IDS
     await db.ensure_scenario_progress(user_id, scenario_key)
     progress = await db.get_scenario_progress(user_id, scenario_key)
 
-    if progress["guide_sent_at"] is None:
+    if progress["guide_sent_at"] is None or is_test_user:
         guide_url = os.getenv(scenario["guide_url_env"]) or scenario.get("guide_url_placeholder", "")
         await bot.send_message(chat_id, scenario["delivery_text"].format(guide_url=guide_url))
         await db.mark_guide_sent(user_id, scenario_key)
         progress = await db.get_scenario_progress(user_id, scenario_key)
 
-    if scenario.get("offer_klod_klub") and progress["club_invite_sent_at"] is None:
+    if scenario.get("offer_klod_klub") and (progress["club_invite_sent_at"] is None or is_test_user):
         await _send_klod_klub_invite(bot, chat_id, user_id, scenario_key)
 
 
