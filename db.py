@@ -118,3 +118,19 @@ async def mark_club_invite_sent(telegram_id: int, scenario: str) -> None:
             (_now(), telegram_id, scenario),
         )
         await db.commit()
+
+
+async def get_pending_club_invites(cutoff_iso: str) -> list[dict]:
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            """
+            SELECT telegram_id, scenario FROM scenario_progress
+            WHERE guide_sent_at IS NOT NULL
+              AND guide_sent_at <= ?
+              AND club_invite_sent_at IS NULL
+            """,
+            (cutoff_iso,),
+        ) as cursor:
+            rows = await cursor.fetchall()
+    return [dict(row) for row in rows]

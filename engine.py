@@ -3,10 +3,11 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+from datetime import datetime, timedelta, timezone
 
 from aiogram import Bot
 from aiogram.exceptions import TelegramBadRequest
-from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
+from aiogram.types import CallbackQuery, FSInputFile, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
 import db
 from config import KLOD_KLUB_URL, MAIN_CHANNEL, TEST_TELEGRAM_IDS
@@ -17,31 +18,36 @@ logger = logging.getLogger(__name__)
 UNKNOWN_SCENARIO_TEXT = "Кажется, эта ссылка уже не работает. Напишите нам, поможем разобраться."
 
 SUBSCRIBE_PROMPT_TEXT = (
-    "Гайд бесплатный, пользуйтесь сколько нужно. Но раз я делюсь им просто так - "
-    "давайте на баш на баш: подпишитесь на канал {channel_url}, там ещё много "
-    "по контенту и нейросетям, и жмите «Готово»."
+    "Гайд полностью бесплатный - пользуйтесь сколько нужно, никаких скрытых счетов через "
+    "полгода. Но раз я не жадная, давайте баш на баш: подпишитесь на канал, там ещё в разы "
+    "больше по контенту и нейросетям, и жмите «Готово»."
 )
-SUBSCRIBE_RETRY_TEXT = "Пока не вижу подписку. Загляните в канал ещё раз и возвращайтесь, жмите «Готово»."
+SUBSCRIBE_RETRY_TEXT = "Пока не вижу подписку. Может, Telegram притормозил, может - вы. Загляните в канал ещё раз и жмите «Готово»."
 
-CLUB_INVITE_TEXT_1 = (
-    "Раз уж вы наводите порядок в аккаунте через промты, вам наверняка вообще "
-    "интересны нейросети. У меня есть отдельный платный канал, Клод-клуб - только "
-    "про них. Как реально ускорять контент с ИИ, без хайпа вокруг."
-)
-CLUB_INVITE_TEXT_2 = (
-    "Если хочется разобраться с нейросетями по-настоящему, а не по кусочкам из "
-    "разных мест - загляните."
+CLUB_INVITE_TEXT = (
+    "Раз уж вы сюда дошли за промтами, вам явно не всё равно на нейросети - будем считать, "
+    "это теперь официально ваша тема. \n"
+    "У меня есть отдельный закрытый канал, Клод-клуб, только про них: реальные способы "
+    "ускорять контент с ИИ, без охов-ахов вокруг очередной нейросети и без беготни по "
+    "десяткам чужих постов и уроков. \n"
+    "Загляните, дальше сами решите."
 )
 CLUB_INVITE_BUTTON = "Посмотреть Клод-клуб"
-
-CLUB_INVITE_DELAY = 2.5
-CLUB_INVITE_INTERNAL_DELAY = 1.5
+CLUB_INVITE_DELAY_MINUTES = 20
+CLUB_INVITE_POLL_SECONDS = 60
 
 
 def _channel_url(channel: str) -> str:
     if channel.startswith("http"):
         return channel
     return f"https://t.me/{channel.lstrip('@')}"
+
+
+async def _send_message(bot: Bot, chat_id: int, text: str, image: str | None = None, reply_markup=None) -> None:
+    if image:
+        await bot.send_photo(chat_id, FSInputFile(image), caption=text, reply_markup=reply_markup)
+    else:
+        await bot.send_message(chat_id, text, reply_markup=reply_markup)
 
 
 async def handle_start(message: Message, scenario_key: str | None) -> None:
@@ -64,7 +70,13 @@ async def _show_welcome(message: Message, scenario: dict) -> None:
             [InlineKeyboardButton(text=scenario["start_button"], callback_data=f"eng:go:{scenario['key']}")]
         ]
     )
-    await message.answer(scenario["welcome_text"], reply_markup=keyboard)
+    await _send_message(
+        message.bot,
+        message.chat.id,
+        scenario["welcome_text"],
+        image=scenario.get("welcome_image"),
+        reply_markup=keyboard,
+    )
 
 
 async def start_button_pressed(callback: CallbackQuery, scenario_key: str) -> None:
@@ -90,8 +102,7 @@ async def _ask_subscription(message: Message, scenario: dict) -> None:
             [InlineKeyboardButton(text="Готово", callback_data=f"eng:sub:{scenario['key']}")],
         ]
     )
-    text = SUBSCRIBE_PROMPT_TEXT.format(channel_url=_channel_url(MAIN_CHANNEL))
-    await message.answer(text, reply_markup=keyboard)
+    await message.answer(SUBSCRIBE_PROMPT_TEXT, reply_markup=keyboard)
 
 
 async def recheck_subscription(callback: CallbackQuery, scenario_key: str) -> None:
@@ -127,22 +138,45 @@ async def _deliver(bot: Bot, chat_id: int, user_id: int, scenario: dict) -> None
 
     if progress["guide_sent_at"] is None or is_test_user:
         guide_url = os.getenv(scenario["guide_url_env"]) or scenario.get("guide_url_placeholder", "")
-        await bot.send_message(chat_id, scenario["delivery_text"].format(guide_url=guide_url))
+        keyboard = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [InlineKeyboardButton(text=scenario.get("delivery_button_text", "Забрать"), url=guide_url)]
+            ]
+        )
+        await _send_message(
+            bot, chat_id, scenario["delivery_text"], image=scenario.get("delivery_image"), reply_markup=keyboard
+        )
         await db.mark_guide_sent(user_id, scenario_key)
-        progress = await db.get_scenario_progress(user_id, scenario_key)
 
-    if scenario.get("offer_klod_klub") and (progress["club_invite_sent_at"] is None or is_test_user):
+    # Обычным пользователям приглашение в Клод-клуб шлёт фоновая рассылка
+    # club_invite_scheduler через CLUB_INVITE_DELAY_MINUTES после выдачи гайда
+    # (см. main.py) - так задержка переживает перезапуск бота. Тестовым
+    # аккаунтам (TEST_TELEGRAM_IDS) шлём сразу, для удобства проверки.
+    if scenario.get("offer_klod_klub") and is_test_user:
         await _send_klod_klub_invite(bot, chat_id, user_id, scenario_key)
 
 
 async def _send_klod_klub_invite(bot: Bot, chat_id: int, user_id: int, scenario_key: str) -> None:
-    await asyncio.sleep(CLUB_INVITE_DELAY)
-    await bot.send_message(chat_id, CLUB_INVITE_TEXT_1)
-
-    await asyncio.sleep(CLUB_INVITE_INTERNAL_DELAY)
-    keyboard = InlineKeyboardMarkup(
-        inline_keyboard=[[InlineKeyboardButton(text=CLUB_INVITE_BUTTON, url=KLOD_KLUB_URL)]]
-    )
-    await bot.send_message(chat_id, CLUB_INVITE_TEXT_2, reply_markup=keyboard)
-
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=CLUB_INVITE_BUTTON, url=KLOD_KLUB_URL)]])
+    await bot.send_message(chat_id, CLUB_INVITE_TEXT, reply_markup=keyboard)
     await db.mark_club_invite_sent(user_id, scenario_key)
+
+
+async def club_invite_scheduler(bot: Bot) -> None:
+    """Фоновая задача: раз в минуту проверяет базу и шлёт отложенные приглашения
+    в Клод-клуб тем, кому гайд выдан больше CLUB_INVITE_DELAY_MINUTES назад."""
+    while True:
+        try:
+            await _process_pending_club_invites(bot)
+        except Exception:
+            logger.exception("Ошибка в фоновой рассылке приглашений в Клод-клуб")
+        await asyncio.sleep(CLUB_INVITE_POLL_SECONDS)
+
+
+async def _process_pending_club_invites(bot: Bot) -> None:
+    cutoff = (datetime.now(timezone.utc) - timedelta(minutes=CLUB_INVITE_DELAY_MINUTES)).isoformat()
+    for row in await db.get_pending_club_invites(cutoff):
+        scenario = REGISTRY.get(row["scenario"])
+        if scenario is None or not scenario.get("offer_klod_klub"):
+            continue
+        await _send_klod_klub_invite(bot, row["telegram_id"], row["telegram_id"], row["scenario"])
