@@ -153,13 +153,14 @@ async def _deliver(bot: Bot, chat_id: int, user_id: int, scenario: dict) -> None
     # (см. main.py) - так задержка переживает перезапуск бота. Тестовым
     # аккаунтам (TEST_TELEGRAM_IDS) шлём сразу, для удобства проверки.
     if scenario.get("offer_klod_klub") and is_test_user:
-        await _send_klod_klub_invite(bot, chat_id, user_id, scenario_key)
+        await _send_klod_klub_invite(bot, chat_id, user_id, scenario)
 
 
-async def _send_klod_klub_invite(bot: Bot, chat_id: int, user_id: int, scenario_key: str) -> None:
+async def _send_klod_klub_invite(bot: Bot, chat_id: int, user_id: int, scenario: dict) -> None:
+    text = scenario.get("klod_klub_text", CLUB_INVITE_TEXT)
     keyboard = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=CLUB_INVITE_BUTTON, url=KLOD_KLUB_URL)]])
-    await bot.send_message(chat_id, CLUB_INVITE_TEXT, reply_markup=keyboard)
-    await db.mark_club_invite_sent(user_id, scenario_key)
+    await bot.send_message(chat_id, text, reply_markup=keyboard)
+    await db.mark_club_invite_sent(user_id, scenario["key"])
 
 
 async def club_invite_scheduler(bot: Bot) -> None:
@@ -179,4 +180,4 @@ async def _process_pending_club_invites(bot: Bot) -> None:
         scenario = REGISTRY.get(row["scenario"])
         if scenario is None or not scenario.get("offer_klod_klub"):
             continue
-        await _send_klod_klub_invite(bot, row["telegram_id"], row["telegram_id"], row["scenario"])
+        await _send_klod_klub_invite(bot, row["telegram_id"], row["telegram_id"], scenario)
