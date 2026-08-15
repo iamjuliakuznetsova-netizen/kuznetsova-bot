@@ -3,3 +3,7 @@ venv/
 __pycache__/
 *.pyc
 bot.db
+
+# Local-only Claude Code dev-server config / runtime lock (machine-specific)
+.claude/launch.json
+.claude/scheduled_tasks.lock
