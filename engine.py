@@ -159,7 +159,7 @@ async def _deliver(bot: Bot, chat_id: int, user_id: int, scenario: dict) -> None
 async def _send_klod_klub_invite(bot: Bot, chat_id: int, user_id: int, scenario: dict) -> None:
     text = scenario.get("klod_klub_text", CLUB_INVITE_TEXT)
     keyboard = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=CLUB_INVITE_BUTTON, url=KLOD_KLUB_URL)]])
-    await bot.send_message(chat_id, text, reply_markup=keyboard)
+    await _send_message(bot, chat_id, text, image=scenario.get("klod_klub_image"), reply_markup=keyboard)
     await db.mark_club_invite_sent(user_id, scenario["key"])
 
 
