@@ -120,6 +120,38 @@ async def mark_club_invite_sent(telegram_id: int, scenario: str) -> None:
         await db.commit()
 
 
+async def total_users() -> int:
+    async with aiosqlite.connect(DB_PATH) as db:
+        async with db.execute("SELECT COUNT(*) FROM users") as cursor:
+            (count,) = await cursor.fetchone()
+    return count
+
+
+async def scenario_stats() -> list[dict]:
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            """
+            SELECT
+                scenario,
+                COUNT(*) AS started,
+                SUM(CASE WHEN guide_sent_at IS NOT NULL THEN 1 ELSE 0 END) AS delivered
+            FROM scenario_progress
+            GROUP BY scenario
+            ORDER BY scenario
+            """
+        ) as cursor:
+            rows = await cursor.fetchall()
+    return [dict(row) for row in rows]
+
+
+async def list_all_user_ids() -> list[int]:
+    async with aiosqlite.connect(DB_PATH) as db:
+        async with db.execute("SELECT telegram_id FROM users") as cursor:
+            rows = await cursor.fetchall()
+    return [row[0] for row in rows]
+
+
 async def get_pending_club_invites(cutoff_iso: str) -> list[dict]:
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row

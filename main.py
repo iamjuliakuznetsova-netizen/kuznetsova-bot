@@ -8,7 +8,7 @@ from aiogram import Bot, Dispatcher
 import db
 from config import BOT_TOKEN
 from engine import club_invite_scheduler
-from handlers import start, subscription
+from handlers import admin, start, subscription
 
 
 async def main() -> None:
@@ -21,6 +21,7 @@ async def main() -> None:
 
     bot = Bot(BOT_TOKEN)
     dp = Dispatcher()
+    dp.include_router(admin.router)
     dp.include_router(start.router)
     dp.include_router(subscription.router)
 

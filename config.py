@@ -21,3 +21,8 @@ DB_PATH = os.getenv("DB_PATH", "bot.db")
 TEST_TELEGRAM_IDS = {
     int(x) for x in os.getenv("TEST_TELEGRAM_IDS", "").split(",") if x.strip()
 }
+
+# telegram_id, которым доступны админские команды бота (/stats, /broadcast)
+ADMIN_TELEGRAM_IDS = {
+    int(x) for x in os.getenv("ADMIN_TELEGRAM_IDS", "").split(",") if x.strip()
+}
