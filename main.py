@@ -9,6 +9,7 @@ import db
 from config import BOT_TOKEN
 from engine import club_invite_scheduler
 from handlers import admin, start, subscription
+from http_session import ResilientAiohttpSession
 
 
 async def main() -> None:
@@ -19,7 +20,7 @@ async def main() -> None:
 
     await db.init_db()
 
-    bot = Bot(BOT_TOKEN)
+    bot = Bot(BOT_TOKEN, session=ResilientAiohttpSession())
     dp = Dispatcher()
     dp.include_router(admin.router)
     dp.include_router(start.router)
