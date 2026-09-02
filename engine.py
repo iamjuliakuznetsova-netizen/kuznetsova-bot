@@ -25,13 +25,14 @@ SUBSCRIBE_PROMPT_TEXT = (
 SUBSCRIBE_RETRY_TEXT = "Пока не вижу подписку. Может, Telegram притормозил, может - вы. Загляните в канал ещё раз и жмите «Готово»."
 
 CLUB_INVITE_TEXT = (
-    "Раз уж вы сюда дошли за промтами, вам явно не всё равно на нейросети - будем считать, "
-    "это теперь официально ваша тема. \n"
-    "У меня есть отдельный закрытый канал, Клод-клуб, только про них: реальные способы "
-    "ускорять контент с ИИ, без охов-ахов вокруг очередной нейросети и без беготни по "
-    "десяткам чужих постов и уроков. \n"
+    "Раз вы дошли до этого материала, вам явно не всё равно, как делать контент и "
+    "вести канал проще - будем считать, это теперь официально ваша тема. \n"
+    "У меня есть отдельный закрытый канал, Клод-клуб: там про нейросети и рабочие "
+    "способы ускорять контент, без охов-ахов вокруг очередной новинки и без беготни "
+    "по десяткам чужих постов и уроков. \n"
     "Загляните, дальше сами решите."
 )
+CLUB_INVITE_IMAGE = "assets/klodklub_default.png"
 CLUB_INVITE_BUTTON = "Посмотреть Клод-клуб"
 CLUB_INVITE_DELAY_MINUTES = 20
 CLUB_INVITE_POLL_SECONDS = 60
@@ -158,8 +159,9 @@ async def _deliver(bot: Bot, chat_id: int, user_id: int, scenario: dict) -> None
 
 async def _send_klod_klub_invite(bot: Bot, chat_id: int, user_id: int, scenario: dict) -> None:
     text = scenario.get("klod_klub_text", CLUB_INVITE_TEXT)
+    image = scenario.get("klod_klub_image", CLUB_INVITE_IMAGE)
     keyboard = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=CLUB_INVITE_BUTTON, url=KLOD_KLUB_URL)]])
-    await _send_message(bot, chat_id, text, image=scenario.get("klod_klub_image"), reply_markup=keyboard)
+    await _send_message(bot, chat_id, text, image=image, reply_markup=keyboard)
     await db.mark_club_invite_sent(user_id, scenario["key"])
 
 
