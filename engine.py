@@ -38,6 +38,20 @@ CLUB_INVITE_DELAY_MINUTES = 20
 CLUB_INVITE_POLL_SECONDS = 60
 
 
+async def safe_answer(callback: CallbackQuery, text: str | None = None) -> None:
+    """Ответить на callback, не давая сбою помешать основной логике.
+
+    Если "квиток" нажатия успел устареть (например, из-за сетевой задержки
+    до Telegram), Telegram отвечает ошибкой - но само нажатие всё равно
+    нужно обработать (проверить подписку, выдать материал и т.д.), а не
+    прерывать выполнение на этом техническом шаге.
+    """
+    try:
+        await callback.answer(text)
+    except TelegramBadRequest as error:
+        logger.warning("Не удалось ответить на callback %r: %s", callback.data, error)
+
+
 def _channel_url(channel: str) -> str:
     if channel.startswith("http"):
         return channel

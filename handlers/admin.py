@@ -10,6 +10,7 @@ from aiogram.filters import Command
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
 import db
+import engine
 from config import ADMIN_TELEGRAM_IDS
 
 logger = logging.getLogger(__name__)
@@ -100,7 +101,7 @@ async def cb_broadcast_cancel(callback: CallbackQuery) -> None:
     if not _is_admin(callback.from_user.id):
         return
     _pending_broadcasts.pop(callback.from_user.id, None)
-    await callback.answer("Отменено")
+    await engine.safe_answer(callback, "Отменено")
     await callback.message.edit_reply_markup(reply_markup=None)
 
 
@@ -110,7 +111,7 @@ async def cb_broadcast_send(callback: CallbackQuery) -> None:
         return
 
     draft = _pending_broadcasts.pop(callback.from_user.id, None)
-    await callback.answer()
+    await engine.safe_answer(callback)
     if draft is None:
         await callback.message.answer("Черновик рассылки не найден (истёк или уже отправлен). Наберите /broadcast заново.")
         return

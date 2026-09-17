@@ -17,5 +17,5 @@ async def cmd_start(message: Message, command: CommandObject) -> None:
 @router.callback_query(F.data.startswith("eng:go:"))
 async def cb_start_button(callback: CallbackQuery) -> None:
     scenario_key = callback.data.split(":", 2)[2]
-    await callback.answer()
+    await engine.safe_answer(callback)
     await engine.start_button_pressed(callback, scenario_key)
