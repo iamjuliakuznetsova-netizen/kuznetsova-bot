@@ -20,11 +20,15 @@ from typing import Any
 
 
 def _flatten_inline(parts: Any) -> str:
-    """Текст параграфа - либо голая строка, либо список из строк и
-    inline-сущностей (bot_command, url и т.п.), каждая со своим полем
-    "text" - это и есть то, что реально видно в сообщении."""
+    """Текст параграфа - голая строка, ОДНА inline-сущность (bot_command,
+    url и т.п. - словарь целиком, без списка-обёртки) или список из строк
+    и таких сущностей вперемешку. Все три формы реально встречались у
+    Telegram на одном и том же типе блока (27.09.2026: "/broadcast" как
+    голый словарь пропадал целиком, потому что код ждал только список)."""
     if isinstance(parts, str):
         return parts
+    if isinstance(parts, dict):
+        return str(parts.get("text", ""))
     if not isinstance(parts, list):
         return ""
     chunks: list[str] = []
