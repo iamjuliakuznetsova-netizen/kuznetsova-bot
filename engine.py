@@ -7,10 +7,17 @@ from datetime import datetime, timedelta, timezone
 
 from aiogram import Bot
 from aiogram.exceptions import TelegramBadRequest
-from aiogram.types import CallbackQuery, FSInputFile, InlineKeyboardButton, InlineKeyboardMarkup, Message
+from aiogram.types import (
+    CallbackQuery,
+    FSInputFile,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    Message,
+    WebAppInfo,
+)
 
 import db
-from config import KLOD_KLUB_URL, MAIN_CHANNEL, TEST_TELEGRAM_IDS
+from config import KLOD_KLUB_URL, MAIN_CHANNEL, TEST_TELEGRAM_IDS, VITRINA_URL
 from scenarios import REGISTRY
 
 logger = logging.getLogger(__name__)
@@ -155,7 +162,8 @@ async def _deliver(bot: Bot, chat_id: int, user_id: int, scenario: dict) -> None
         guide_url = os.getenv(scenario["guide_url_env"]) or scenario.get("guide_url_placeholder", "")
         keyboard = InlineKeyboardMarkup(
             inline_keyboard=[
-                [InlineKeyboardButton(text=scenario.get("delivery_button_text", "Забрать"), url=guide_url)]
+                [InlineKeyboardButton(text=scenario.get("delivery_button_text", "Забрать"), url=guide_url)],
+                [InlineKeyboardButton(text="Все материалы", web_app=WebAppInfo(url=VITRINA_URL))],
             ]
         )
         await _send_message(

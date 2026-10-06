@@ -16,6 +16,10 @@ MAIN_CHANNEL = _normalize_channel(os.getenv("MAIN_CHANNEL", "@semero4ka_videomak
 KLOD_KLUB_URL = os.getenv("KLOD_KLUB_URL", "https://t.me/kuznetsova_klodklub_bot")
 DB_PATH = os.getenv("DB_PATH", "bot.db")
 
+# Мини-приложение "витрина" всех продуктов (делает отдельная ветка, не этот бот):
+# кнопка "Все материалы" под выдачей гайда открывает его прямо в чате
+VITRINA_URL = os.getenv("VITRINA_URL", "https://app.kuznetsova.studio")
+
 # telegram_id из этого списка не подчиняются правилу "гайд и приглашение шлём один раз" -
 # удобно для ручного тестирования сценариев без правки базы
 TEST_TELEGRAM_IDS = {
