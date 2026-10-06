@@ -6,7 +6,7 @@ import os
 from datetime import datetime, timedelta, timezone
 
 from aiogram import Bot
-from aiogram.exceptions import TelegramBadRequest
+from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
 from aiogram.types import (
     CallbackQuery,
     FSInputFile,
@@ -204,4 +204,14 @@ async def _process_pending_club_invites(bot: Bot) -> None:
         scenario = REGISTRY.get(row["scenario"])
         if scenario is None or not scenario.get("offer_klod_klub"):
             continue
-        await _send_klod_klub_invite(bot, row["telegram_id"], row["telegram_id"], scenario)
+        user_id = row["telegram_id"]
+        try:
+            await _send_klod_klub_invite(bot, user_id, user_id, scenario)
+        except TelegramForbiddenError:
+            # Человек заблокировал бота - писать некому. Закрываем запись, иначе
+            # он вечно стоит первым в очереди, сбой обрывает весь цикл и
+            # приглашения не получают все, кто за ним (так было 4-6.10.2026).
+            logger.info("Пользователь %s заблокировал бота, приглашение не отправлено", user_id)
+            await db.mark_club_invite_sent(user_id, row["scenario"])
+        except Exception:
+            logger.exception("Не удалось отправить приглашение пользователю %s", user_id)
