@@ -11,6 +11,7 @@ from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMar
 
 import db
 import engine
+import subscription_audit
 from config import ADMIN_TELEGRAM_IDS
 
 logger = logging.getLogger(__name__)
@@ -22,6 +23,7 @@ SEND_DELAY_SECONDS = 0.05  # ~20 сообщений в секунду, с зап
 # Черновики рассылки между командой /broadcast и подтверждением - в памяти,
 # не в базе: живут недолго (пока админ не подтвердит или не отменит).
 _pending_broadcasts: dict[int, dict] = {}
+_stats_lock = asyncio.Lock()
 
 
 def _is_admin(user_id: int) -> bool:
@@ -33,15 +35,26 @@ async def cmd_stats(message: Message) -> None:
     if not _is_admin(message.from_user.id):
         return
 
-    total = await db.total_users()
-    rows = await db.scenario_stats()
+    if _stats_lock.locked():
+        await message.answer("Проверка подписок уже идёт, подождите минуту и повторите /stats.")
+        return
 
-    lines = [f"👥 Всего пользователей бота: {total}", ""]
-    if not rows:
-        lines.append("Пока никто не заходил ни в один сценарий.")
-    for row in rows:
-        lines.append(f"• {row['scenario']}: заходили {row['started']}, получили гайд {row['delivered']}")
-    await message.answer("\n".join(lines))
+    async with _stats_lock:
+        total = await db.total_users()
+        rows = await db.scenario_stats()
+        receivers = await db.scenario_receivers()
+        user_ids = sorted({user_id for _, user_id in receivers})
+
+        eta = max(5, round(len(user_ids) / subscription_audit.REQUESTS_PER_SECOND * 2))
+        await message.answer(f"Проверяю подписку на канал у {len(user_ids)} человек, это займёт до {eta} сек...")
+
+        result = await subscription_audit.run_audit(message.bot, user_ids)
+        previous_at = await db.previous_check_run(result.checked_at)
+        previous_states = await db.subscription_states(previous_at) if previous_at else {}
+
+    await message.answer(
+        subscription_audit.build_stats_text(total, rows, receivers, result, previous_at, previous_states)
+    )
 
 
 @router.message(Command("broadcast"))

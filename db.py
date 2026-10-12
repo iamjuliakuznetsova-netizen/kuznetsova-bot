@@ -23,6 +23,15 @@ CREATE TABLE IF NOT EXISTS scenario_progress (
     club_invite_sent_at TEXT,
     PRIMARY KEY (telegram_id, scenario)
 );
+
+CREATE TABLE IF NOT EXISTS subscription_checks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    telegram_id INTEGER NOT NULL,
+    checked_at TEXT NOT NULL,
+    is_subscribed INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_subscription_checks_run ON subscription_checks (checked_at);
 """
 
 
@@ -150,6 +159,45 @@ async def list_all_user_ids() -> list[int]:
         async with db.execute("SELECT telegram_id FROM users") as cursor:
             rows = await cursor.fetchall()
     return [row[0] for row in rows]
+
+
+async def scenario_receivers() -> list[tuple[str, int]]:
+    """Пары (сценарий, telegram_id) всех, кому выдан гайд."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        async with db.execute(
+            "SELECT scenario, telegram_id FROM scenario_progress WHERE guide_sent_at IS NOT NULL"
+        ) as cursor:
+            rows = await cursor.fetchall()
+    return [(row[0], row[1]) for row in rows]
+
+
+async def save_subscription_checks(checked_at: str, states: dict[int, bool]) -> None:
+    """Результат одной проверки подписки: все строки прогона делят checked_at,
+    по нему же потом находится "прошлая проверка" для динамики."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.executemany(
+            "INSERT INTO subscription_checks (telegram_id, checked_at, is_subscribed) VALUES (?, ?, ?)",
+            [(user_id, checked_at, int(state)) for user_id, state in states.items()],
+        )
+        await db.commit()
+
+
+async def previous_check_run(before: str) -> str | None:
+    async with aiosqlite.connect(DB_PATH) as db:
+        async with db.execute(
+            "SELECT MAX(checked_at) FROM subscription_checks WHERE checked_at < ?", (before,)
+        ) as cursor:
+            row = await cursor.fetchone()
+    return row[0] if row and row[0] else None
+
+
+async def subscription_states(checked_at: str) -> dict[int, bool]:
+    async with aiosqlite.connect(DB_PATH) as db:
+        async with db.execute(
+            "SELECT telegram_id, is_subscribed FROM subscription_checks WHERE checked_at = ?", (checked_at,)
+        ) as cursor:
+            rows = await cursor.fetchall()
+    return {row[0]: bool(row[1]) for row in rows}
 
 
 async def get_pending_club_invites(cutoff_iso: str) -> list[dict]:
