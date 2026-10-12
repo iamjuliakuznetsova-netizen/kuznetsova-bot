@@ -47,8 +47,7 @@ class AuditResult:
 async def check_subscription(bot: Bot, user_id: int) -> bool | None:
     """True - подписан, False - нет, None - проверить не удалось.
 
-    Нельзя, как в engine._check_membership, считать любой BadRequest за "не
-    подписан": если бот потеряет права админа в канале, Telegram ответит
+    Нельзя считать любой BadRequest за "не подписан": если бот потеряет права админа в канале, Telegram ответит
     "member list is inaccessible", и вся аудитория выглядела бы отписанной."""
     try:
         member = await bot.get_chat_member(MAIN_CHANNEL, user_id)

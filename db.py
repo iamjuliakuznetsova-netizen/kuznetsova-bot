@@ -60,15 +60,6 @@ async def ensure_user(telegram_id: int, username: str | None, first_name: str | 
         await db.commit()
 
 
-async def is_subscribed(telegram_id: int) -> bool:
-    async with aiosqlite.connect(DB_PATH) as db:
-        async with db.execute(
-            "SELECT subscribed_at FROM users WHERE telegram_id = ?", (telegram_id,)
-        ) as cursor:
-            row = await cursor.fetchone()
-    return row is not None and row[0] is not None
-
-
 async def mark_subscribed(telegram_id: int) -> None:
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute(

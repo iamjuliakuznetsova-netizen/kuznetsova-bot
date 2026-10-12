@@ -17,6 +17,7 @@ from aiogram.types import (
 )
 
 import db
+import subscription_audit
 from config import KLOD_KLUB_URL, MAIN_CHANNEL, TEST_TELEGRAM_IDS, VITRINA_URL
 from scenarios import REGISTRY
 
@@ -110,7 +111,7 @@ async def start_button_pressed(callback: CallbackQuery, scenario_key: str) -> No
         await callback.message.answer(UNKNOWN_SCENARIO_TEXT)
         return
 
-    if scenario["require_subscription"] and not await db.is_subscribed(callback.from_user.id):
+    if scenario["require_subscription"] and not await _is_subscribed_now(callback.bot, callback.from_user.id):
         await _ask_subscription(callback.message, scenario)
         return
 
@@ -137,19 +138,27 @@ async def recheck_subscription(callback: CallbackQuery, scenario_key: str) -> No
         return
 
     user_id = callback.from_user.id
-    if await _check_membership(callback.bot, user_id):
-        await db.mark_subscribed(user_id)
+    if await _is_subscribed_now(callback.bot, user_id):
         await _deliver(callback.bot, callback.message.chat.id, user_id, scenario)
     else:
         await callback.message.answer(SUBSCRIBE_RETRY_TEXT)
 
 
-async def _check_membership(bot: Bot, user_id: int) -> bool:
-    try:
-        member = await bot.get_chat_member(MAIN_CHANNEL, user_id)
-    except TelegramBadRequest:
-        return False
-    return member.status in ("member", "administrator", "creator")
+async def _is_subscribed_now(bot: Bot, user_id: int) -> bool:
+    """Подписан ли человек на канал прямо сейчас (а не "был подписан когда-то").
+
+    Раньше подписка проверялась один раз и запоминалась навсегда, так что
+    отписавшийся человек получал следующие гайды без подписки. Теперь проверяем
+    при каждом нажатии. Если Telegram не ответил (сетевой сбой, бот потерял
+    права в канале) - пропускаем человека: лучше выдать гайд, чем отказать
+    настоящему подписчику из-за чужой ошибки."""
+    state = await subscription_audit.check_subscription(bot, user_id)
+    if state is None:
+        logger.warning("Подписку %s проверить не удалось - пропускаем без проверки", user_id)
+        return True
+    if state:
+        await db.mark_subscribed(user_id)
+    return state
 
 
 async def _deliver(bot: Bot, chat_id: int, user_id: int, scenario: dict) -> None:
