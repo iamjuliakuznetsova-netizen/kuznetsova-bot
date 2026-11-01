@@ -67,6 +67,12 @@ def _channel_url(channel: str) -> str:
 
 
 async def _send_message(bot: Bot, chat_id: int, text: str, image: str | None = None, reply_markup=None) -> None:
+    if image and not os.path.exists(image):
+        # Картинки у сценариев необязательны: пока файл не положили в assets/,
+        # шлём то же сообщение текстом, а не падаем (иначе человек остался бы
+        # без материала, а приглашение в Клод-клуб повторялось бы вечно).
+        logger.warning("Файл картинки %s не найден - отправляю сообщение без неё", image)
+        image = None
     if image:
         await bot.send_photo(chat_id, FSInputFile(image), caption=text, reply_markup=reply_markup)
     else:
