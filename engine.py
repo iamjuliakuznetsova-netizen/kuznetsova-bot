@@ -30,6 +30,7 @@ SUBSCRIBE_PROMPT_TEXT = (
     "полгода. Но раз я не жадная, давайте баш на баш: подпишитесь на канал, там ещё в разы "
     "больше по контенту и нейросетям, и жмите «Готово»."
 )
+FILE_UNAVAILABLE_TEXT = "Файл сейчас недоступен - это наша техническая заминка, не ваша. Нажмите «Старт» ещё раз чуть позже."
 SUBSCRIBE_RETRY_TEXT = "Пока не вижу подписку. Может, Telegram притормозил, может - вы. Загляните в канал ещё раз и жмите «Готово»."
 
 CLUB_INVITE_TEXT = (
@@ -167,6 +168,46 @@ async def _is_subscribed_now(bot: Bot, user_id: int) -> bool:
     return state
 
 
+def _delivery_keyboard(scenario: dict) -> InlineKeyboardMarkup:
+    rows = []
+    if scenario.get("guide_url_env"):
+        guide_url = os.getenv(scenario["guide_url_env"]) or scenario.get("guide_url_placeholder", "")
+        rows.append([InlineKeyboardButton(text=scenario.get("delivery_button_text", "Забрать"), url=guide_url)])
+    rows.append([InlineKeyboardButton(text="Все материалы", web_app=WebAppInfo(url=VITRINA_URL))])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def _delivery_file_path(scenario: dict) -> str | None:
+    """Путь к файлу выдачи (если сценарий выдаёт файл, а не ссылку) или None,
+    если файл не задан/не найден. Сами файлы лежат только на сервере, не в
+    git: репозиторий публичный, и файл можно было бы скачать мимо подписки."""
+    env_name = scenario.get("delivery_file_env")
+    if not env_name:
+        return None
+    path = os.getenv(env_name, "")
+    return path if path and os.path.isfile(path) else None
+
+
+async def _send_document(bot: Bot, chat_id: int, path: str, filename: str | None = None) -> None:
+    """Отправить файл. Первый раз - загрузкой, дальше по file_id из базы:
+    это мгновенно и не зависит от нестабильной сети при загрузке. Ключ кэша
+    включает размер и время изменения - заменили файл, загрузится заново."""
+    stat = os.stat(path)
+    cache_key = f"{path}:{stat.st_size}:{int(stat.st_mtime)}"
+
+    file_id = await db.get_file_id(cache_key)
+    if file_id:
+        try:
+            await bot.send_document(chat_id, file_id)
+            return
+        except TelegramBadRequest:
+            logger.warning("Сохранённый file_id для %s не подошёл - загружаю файл заново", path)
+
+    message = await bot.send_document(chat_id, FSInputFile(path, filename=filename), request_timeout=120)
+    if message is not None and getattr(message, "document", None):
+        await db.save_file_id(cache_key, message.document.file_id)
+
+
 async def _deliver(bot: Bot, chat_id: int, user_id: int, scenario: dict) -> None:
     scenario_key = scenario["key"]
     is_test_user = user_id in TEST_TELEGRAM_IDS
@@ -174,16 +215,23 @@ async def _deliver(bot: Bot, chat_id: int, user_id: int, scenario: dict) -> None
     progress = await db.get_scenario_progress(user_id, scenario_key)
 
     if progress["guide_sent_at"] is None or is_test_user:
-        guide_url = os.getenv(scenario["guide_url_env"]) or scenario.get("guide_url_placeholder", "")
-        keyboard = InlineKeyboardMarkup(
-            inline_keyboard=[
-                [InlineKeyboardButton(text=scenario.get("delivery_button_text", "Забрать"), url=guide_url)],
-                [InlineKeyboardButton(text="Все материалы", web_app=WebAppInfo(url=VITRINA_URL))],
-            ]
-        )
+        file_path = _delivery_file_path(scenario)
+        if scenario.get("delivery_file_env") and file_path is None:
+            # Файл не лежит на месте - не шлём "файл ваш" без файла и не
+            # помечаем выдачу состоявшейся, чтобы повторное нажатие сработало.
+            logger.error("Файл выдачи сценария %s не найден (переменная %s)", scenario_key, scenario["delivery_file_env"])
+            await bot.send_message(chat_id, FILE_UNAVAILABLE_TEXT)
+            return
+
         await _send_message(
-            bot, chat_id, scenario["delivery_text"], image=scenario.get("delivery_image"), reply_markup=keyboard
+            bot,
+            chat_id,
+            scenario["delivery_text"],
+            image=scenario.get("delivery_image"),
+            reply_markup=_delivery_keyboard(scenario),
         )
+        if file_path is not None:
+            await _send_document(bot, chat_id, file_path, scenario.get("delivery_file_name"))
         await db.mark_guide_sent(user_id, scenario_key)
 
     # Обычным пользователям приглашение в Клод-клуб шлёт фоновая рассылка

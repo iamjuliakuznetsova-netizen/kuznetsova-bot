@@ -7,3 +7,6 @@ bot.db
 # Local-only Claude Code dev-server config / runtime lock (machine-specific)
 .claude/launch.json
 .claude/scheduled_tasks.lock
+
+# Файлы выдачи лид-магнитов (PDF и т.п.) лежат только на сервере, не в публичном репозитории
+files/

@@ -32,6 +32,11 @@ CREATE TABLE IF NOT EXISTS subscription_checks (
 );
 
 CREATE INDEX IF NOT EXISTS idx_subscription_checks_run ON subscription_checks (checked_at);
+
+CREATE TABLE IF NOT EXISTS file_ids (
+    cache_key TEXT PRIMARY KEY,
+    file_id TEXT NOT NULL
+);
 """
 
 
@@ -189,6 +194,23 @@ async def subscription_states(checked_at: str) -> dict[int, bool]:
         ) as cursor:
             rows = await cursor.fetchall()
     return {row[0]: bool(row[1]) for row in rows}
+
+
+async def get_file_id(cache_key: str) -> str | None:
+    async with aiosqlite.connect(DB_PATH) as db:
+        async with db.execute("SELECT file_id FROM file_ids WHERE cache_key = ?", (cache_key,)) as cursor:
+            row = await cursor.fetchone()
+    return row[0] if row else None
+
+
+async def save_file_id(cache_key: str, file_id: str) -> None:
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "INSERT INTO file_ids (cache_key, file_id) VALUES (?, ?) "
+            "ON CONFLICT(cache_key) DO UPDATE SET file_id = excluded.file_id",
+            (cache_key, file_id),
+        )
+        await db.commit()
 
 
 async def get_pending_club_invites(cutoff_iso: str) -> list[dict]:

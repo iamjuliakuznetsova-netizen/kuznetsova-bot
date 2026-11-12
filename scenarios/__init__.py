@@ -1,4 +1,4 @@
-from . import domen, gptwork, insta_uroki, kollazh, pereezd, shrifty, tekst, tg_uroki, upakovka
+from . import domen, gptwork, insta_uroki, kollazh, mishka, pereezd, shrifty, tekst, tg_uroki, upakovka
 
 REGISTRY = {
     upakovka.SCENARIO["key"]: upakovka.SCENARIO,
@@ -10,4 +10,5 @@ REGISTRY = {
     kollazh.SCENARIO["key"]: kollazh.SCENARIO,
     tekst.SCENARIO["key"]: tekst.SCENARIO,
     pereezd.SCENARIO["key"]: pereezd.SCENARIO,
+    mishka.SCENARIO["key"]: mishka.SCENARIO,
 }

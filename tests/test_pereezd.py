@@ -99,13 +99,13 @@ async def run() -> None:
             os.remove(club_image)
 
     # остальные сценарии не задеты
-    for i, key in enumerate(k for k in REGISTRY if k != "pereezd"):
+    for i, key in enumerate(k for k in REGISTRY if k != "pereezd" and "delivery_file_env" not in REGISTRY[k]):
         uid = 900 + i
         SENT.clear()
         await engine.handle_start(Msg(bot, uid), key)
         await engine.start_button_pressed(Cb(bot, uid), key)
         assert any(s[2] is not None and len(s[2].inline_keyboard) == 2 for s in SENT), f"{key}: выдача сломалась"
-    print(f"Остальные {len(REGISTRY) - 1} сценариев выдают гайд как раньше - OK")
+    print("Остальные сценарии со ссылкой выдают гайд как раньше - OK")
 
 
 asyncio.run(run())
